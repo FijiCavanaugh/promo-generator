@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Генератор промокодов</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: settings panel on the left, a perforated "ticket stub" list of codes on the right; stacks on phones. */
+  :root {
+    --bg: #edf0f5;
+    --surface: #ffffff;
+    --surface-2: #f4f6fa;
+    --line: #d5dbe6;
+    --fg: #151a23;
+    --muted: #576175;
+    --accent: #2d4fd8;
+    --accent-fg: #ffffff;
+    --accent-soft: #e2e8ff;
+    --star: #b26b00;
+    --ok: #17794b;
+    --font-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1118;
+      --surface: #151b25;
+      --surface-2: #1b2230;
+      --line: #2a3345;
+      --fg: #e8ecf4;
+      --muted: #93a0b6;
+      --accent: #8fa5ff;
+      --accent-fg: #0d1118;
+      --accent-soft: #222c4f;
+      --star: #e8b449;
+      --ok: #4cc38a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1118;
+    --surface: #151b25;
+    --surface-2: #1b2230;
+    --line: #2a3345;
+    --fg: #e8ecf4;
+    --muted: #93a0b6;
+    --accent: #8fa5ff;
+    --accent-fg: #0d1118;
+    --accent-soft: #222c4f;
+    --star: #e8b449;
+    --ok: #4cc38a;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    padding-block: 28px 56px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 22px; }
+
+  header h1 { margin: 0; font-size: clamp(1.5rem, 2.6vw, 2rem); font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+  header p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+
+  .layout { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 880px) {
+    .layout { grid-template-columns: 340px minmax(0, 1fr); align-items: start; }
+  }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; }
+  .panel h2 { margin: 0 0 12px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+
+  form { display: grid; gap: 18px; }
+  fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 14px; min-width: 0; }
+  .field { display: grid; gap: 5px; min-width: 0; }
+  .field > label, .field > .label { font-weight: 500; font-size: 14px; }
+  .hint { color: var(--muted); font-size: 12.5px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  input[type="text"], select, textarea {
+    width: 100%;
+    font: inherit;
+    color: var(--fg);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-height: 40px;
+  }
+  textarea { resize: vertical; min-height: 72px; font-family: var(--font-mono); font-size: 13px; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .range-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  output { font-family: var(--font-mono); font-weight: 700; font-size: 14px; }
+
+  .seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px; padding: 3px; gap: 3px; }
+  .seg label { display: block; position: relative; }
+  .seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .seg span { display: block; text-align: center; padding: 8px 6px; border-radius: 7px; font-weight: 500; font-size: 14px; color: var(--muted); }
+  .seg input:checked + span { background: var(--accent); color: var(--accent-fg); }
+  .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .checks { display: grid; gap: 8px; }
+  .check { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; align-items: start; cursor: pointer; }
+  .check b { font-weight: 500; }
+  .check code { font-family: var(--font-mono); font-size: 12px; color: var(--muted); display: block; }
+
+  .btn {
+    font: inherit; font-weight: 500; cursor: pointer;
+    border-radius: 8px; padding: 8px 14px; min-height: 40px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .btn.small { min-height: 34px; padding: 5px 11px; font-size: 13.5px; }
+  .btn.link { border-color: transparent; background: transparent; color: var(--accent); padding-inline: 4px; }
+
+  .res-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px; margin-bottom: 4px; }
+  .res-head h2 { margin: 0; }
+  .res-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .note { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+  .note.warn { color: var(--star); }
+
+  .codes { list-style: none; margin: 8px 0 0; padding: 0; }
+  .code-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "star code copy" "star meta copy";
+    column-gap: 12px; align-items: center;
+    padding: 11px 2px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .code-row:last-child { border-bottom: 0; }
+  .star { grid-area: star; background: none; border: 0; cursor: pointer; font-size: 20px; line-height: 1; color: var(--muted); padding: 6px; border-radius: 6px; }
+  .star[aria-pressed="true"] { color: var(--star); }
+  .code { grid-area: code; font-family: var(--font-mono); font-weight: 700; font-size: 1.2rem; letter-spacing: 0.04em; overflow-wrap: anywhere; }
+  .meta { grid-area: meta; display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--muted); font-size: 12.5px; }
+  .meta .len { font-family: var(--font-mono); }
+  .code-row .btn { grid-area: copy; min-width: 112px; }
+  .btn.done { color: var(--ok); border-color: var(--ok); }
+
+  .favs-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .fav { display: flex; align-items: center; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px 4px 3px 10px; }
+  .fav span { font-family: var(--font-mono); font-weight: 700; font-size: 14px; letter-spacing: 0.03em; }
+  .empty { color: var(--muted); margin: 0; }
+
+  footer { color: var(--muted); font-size: 12.5px; max-width: 70ch; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  @media (max-width: 480px) {
+    .code-row { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "star code" "star meta" "copy copy"; row-gap: 4px; }
+    .code-row .btn { width: 100%; margin-top: 6px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Генератор промокодов</h1>
+    <p>Тематические коды под акцию или пакет одноразовых. Только A–Z и 0–9, чтобы код без проблем вводился в CRM и на сайте.</p>
+  </header>
+
+  <div class="layout">
+    <section class="panel" aria-label="Настройки">
+      <h2>Настройки</h2>
+      <form id="form" autocomplete="off">
+        <div class="field">
+          <span class="label" id="modeLabel">Тип кодов</span>
+          <div class="seg" role="radiogroup" aria-labelledby="modeLabel">
+            <label><input type="radio" name="mode" value="themed" checked><span>Тематические</span></label>
+            <label><input type="radio" name="mode" value="batch"><span>Пакет уникальных</span></label>
+          </div>
+        </div>
+
+        <fieldset id="themedFields">
+          <div class="field">
+            <label for="theme">Тема акции</label>
+            <select id="theme">
+              <option value="reactivation" selected>Реактивация</option>
+              <option value="welcome">Приветственный</option>
+              <option value="vip">VIP</option>
+              <option value="halloween">Хэллоуин</option>
+              <option value="newyear">Новый год</option>
+              <option value="cashback">Кешбэк</option>
+              <option value="freespins">Фриспины</option>
+              <option value="deposit">Депозит</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="lang">Язык слов</label>
+            <select id="lang">
+              <option value="both" selected>Испанский и английский</option>
+              <option value="es">Испанский (LATAM)</option>
+              <option value="en">Английский</option>
+            </select>
+          </div>
+          <div class="row2">
+            <div class="field">
+              <label for="amount">Число в коде</label>
+              <input type="text" id="amount" inputmode="numeric" value="150" placeholder="150">
+            </div>
+            <div class="field">
+              <label for="year">Год (2 цифры)</label>
+              <input type="text" id="year" inputmode="numeric" maxlength="2" value="26">
+            </div>
+          </div>
+          <p class="hint" style="margin:-6px 0 0">150000 станет 150K. Пусто — случайные числа.</p>
+          <div class="field">
+            <label for="custom">Своё слово (необязательно)</label>
+            <input type="text" id="custom" maxlength="10" placeholder="например, название бренда">
+          </div>
+          <div class="field">
+            <div class="range-head"><label for="maxlen">Максимальная длина</label><output id="maxlenOut" for="maxlen">12</output></div>
+            <input type="range" id="maxlen" min="6" max="16" value="12">
+          </div>
+          <div class="field">
+            <span class="label">Стили</span>
+            <div class="checks">
+              <label class="check"><input type="checkbox" name="style" value="wordnum" checked><span><b>Слово + число</b><code>VUELVE150</code></span></label>
+              <label class="check"><input type="checkbox" name="style" value="word2word" checked><span><b>Слово 2 слово</b><code>BACK2WIN</code></span></label>
+              <label class="check"><input type="checkbox" name="style" value="wordword" checked><span><b>Слово + слово</b><code>VIPBONUS</code></span></label>
+              <label class="check"><input type="checkbox" name="style" value="wordyear" checked><span><b>Слово + год</b><code>BACK26</code></span></label>
+              <label class="check"><input type="checkbox" name="style" value="numword" checked><span><b>Число + слово</b><code>150GANA</code></span></label>
+            </div>
+          </div>
+          <div class="field">
+            <div class="range-head"><label for="count">Сколько кодов</label><output id="countOut" for="count">12</output></div>
+            <input type="range" id="count" min="5" max="30" value="12">
+          </div>
+        </fieldset>
+
+        <fieldset id="batchFields" hidden>
+          <div class="field">
+            <label for="prefix">Префикс</label>
+            <input type="text" id="prefix" maxlength="8" value="VIP" placeholder="VIP">
+          </div>
+          <div class="field">
+            <div class="range-head"><label for="rlen">Длина случайной части</label><output id="rlenOut" for="rlen">6</output></div>
+            <input type="range" id="rlen" min="4" max="10" value="6">
+          </div>
+          <div class="field">
+            <div class="range-head"><label for="bcount">Сколько кодов</label><output id="bcountOut" for="bcount">20</output></div>
+            <input type="range" id="bcount" min="5" max="100" step="5" value="20">
+          </div>
+          <div class="checks">
+            <label class="check"><input type="checkbox" id="safe" checked><span><b>Без похожих символов</b><code>без 0, O, 1, I, L</code></span></label>
+            <label class="check"><input type="checkbox" id="dash" checked><span><b>Дефис после префикса</b><code>VIP-K7M2QX</code></span></label>
+          </div>
+        </fieldset>
+
+        <div class="field">
+          <label for="exclude">Уже использованные коды</label>
+          <textarea id="exclude" rows="3" placeholder="По одному в строке или через запятую"></textarea>
+          <span class="hint">Эти коды в результат не попадут. Список хранится в этом браузере.</span>
+        </div>
+
+        <button type="submit" class="btn primary" id="go">Сгенерировать</button>
+      </form>
+    </section>
+
+    <section class="panel" aria-label="Результат">
+      <div class="res-head">
+        <h2 id="resTitle">Коды</h2>
+        <div class="res-actions">
+          <button type="button" class="btn small" id="copyAll">Копировать все</button>
+          <button type="button" class="btn small" id="excludeAll">В использованные</button>
+        </div>
+      </div>
+      <p class="note" id="resNote"></p>
+      <ul class="codes" id="codes"></ul>
+    </section>
+  </div>
+
+  <section class="panel" aria-label="Избранное">
+    <div class="res-head">
+      <h2>Избранное</h2>
+      <button type="button" class="btn small link" id="clearFavs">Очистить</button>
+    </div>
+    <div id="favsBox"></div>
+  </section>
+
+  <footer>
+    Перед запуском сверь коды с базой в CRM: учитывает ли система регистр и нет ли такого кода в старых акциях. Избранное и список использованных хранятся только в этом браузере.
+  </footer>
+</div>
+<div class="sr" id="live" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+
+  var THEMES = {
+    reactivation: { en: ['BACK', 'COMEBACK', 'RETURN', 'MISSYOU', 'AGAIN', 'REVIVE', 'REBOOT'], es: ['VUELVE', 'VOLVE', 'REGRESA', 'VOLVISTE', 'HOLA', 'DENUEVO', 'TEEXTRANO'] },
+    welcome:      { en: ['WELCOME', 'HELLO', 'START', 'HEY', 'JOIN', 'NEWBIE', 'KICKOFF'], es: ['BIENVENIDO', 'HOLA', 'EMPEZA', 'NUEVO', 'ARRANCA', 'UNITE', 'DEBUT'] },
+    vip:          { en: ['VIP', 'ELITE', 'GOLD', 'ROYAL', 'PRIME', 'BLACK', 'IMPERIAL'], es: ['VIP', 'ELITE', 'ORO', 'REAL', 'PRIVADO', 'IMPERIO', 'DIAMANTE'] },
+    halloween:    { en: ['BOO', 'SPOOKY', 'TRICK', 'PUMPKIN', 'GHOST', 'WITCH', 'CURSED'], es: ['BU', 'TERROR', 'TRUCO', 'ZAPALLO', 'FANTASMA', 'BRUJA', 'MALDITO'] },
+    newyear:      { en: ['NEWYEAR', 'HNY', 'SNOW', 'FROST', 'MIDNIGHT', 'CHEERS', 'NYE'], es: ['FELIZ', 'BRINDIS', 'NAVIDAD', 'FIESTA', 'CAMPANAS', 'NOCHEBUENA', 'ANONUEVO'] },
+    cashback:     { en: ['CASHBACK', 'REFUND', 'PAYBACK', 'SAFE', 'RETURN', 'COVER'], es: ['DEVUELVE', 'RECUPERA', 'REINTEGRO', 'CUBRE', 'RESPALDO', 'CASHBACK'] },
+    freespins:    { en: ['SPIN', 'SPINS', 'FREESPIN', 'REELS', 'TWIRL', 'SPINUP'], es: ['GIROS', 'GIRA', 'TIRADAS', 'GIRATE', 'RODILLO', 'SPINS'] },
+    deposit:      { en: ['DEPO', 'BOOST', 'TOPUP', 'DOUBLE', 'MATCH', 'RELOAD', 'FUEL'], es: ['DEPOSITA', 'RECARGA', 'DUPLICA', 'CARGA', 'SUMA', 'TRIPLICA', 'IMPULSO'] }
+  };
+  var CLOSERS = {
+    en: ['WIN', 'BONUS', 'LUCKY', 'PLAY', 'WINNER', 'JACKPOT', 'BIGWIN', 'CASH', 'GO'],
+    es: ['GANA', 'BONO', 'SUERTE', 'JUEGA', 'PREMIO', 'GANADOR', 'CASH', 'YA', 'VOS']
+  };
+  var STYLE_LABELS = {
+    wordnum: 'Слово + число', word2word: 'Слово 2 слово', wordword: 'Слово + слово',
+    wordyear: 'Слово + год', numword: 'Число + слово', random: 'Случайный'
+  };
+  var DEFAULT_NUMS = ['10', '25', '50', '77', '100', '150', '200', '300', '500', '1K'];
+
+  var KEY_FAVS = 'promo_favs_v1', KEY_EXCL = 'promo_excl_v1';
+  function lsGet(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+  function rndInt(n) {
+    try { var a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; }
+    catch (e) { return Math.floor(Math.random() * n); }
+  }
+  function pick(arr) { return arr[rndInt(arr.length)]; }
+  function norm(s) { return String(s).toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+
+  function numToken(raw) {
+    var n = parseInt(String(raw).replace(/\D/g, ''), 10);
+    if (!n) return pick(DEFAULT_NUMS);
+    if (n >= 1000 && n % 1000 === 0) return (n / 1000) + 'K';
+    return String(n);
+  }
+
+  function parseExclude(text) {
+    return String(text).split(/[\s,;]+/).map(norm).filter(Boolean);
+  }
+
+  function genThemed(o) {
+    var out = [], seen = new Set(o.exclude), tries = 0;
+    if (!o.styles.length) return out;
+    var langs = o.lang === 'both' ? ['es', 'en'] : [o.lang];
+    var openers = [], closers = [];
+    langs.forEach(function (l) {
+      openers = openers.concat(THEMES[o.theme][l]);
+      closers = closers.concat(CLOSERS[l]);
+    });
+    while (out.length < o.count && tries < 5000) {
+      tries++;
+      var style = pick(o.styles);
+      var A = o.custom || pick(openers);
+      var B = pick(closers);
+      var N = numToken(o.amount);
+      var code;
+      if (style === 'wordnum') code = A + N;
+      else if (style === 'word2word') code = A + '2' + B;
+      else if (style === 'wordword') code = A + B;
+      else if (style === 'wordyear') code = A + o.year;
+      else code = o.custom ? N + A : N + B;
+      code = norm(code);
+      if (code.length < 5 || code.length > o.maxLen) continue;
+      if (seen.has(code)) continue;
+      seen.add(code);
+      out.push({ code: code, style: style });
+    }
+    return out;
+  }
+
+  function genBatch(o) {
+    var out = [], seen = new Set(o.exclude), tries = 0;
+    var alpha = o.safe ? 'ABCDEFGHJKMNPQRSTUVWXYZ23456789' : 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    while (out.length < o.count && tries < o.count * 60) {
+      tries++;
+      var tail = '';
+      for (var i = 0; i < o.len; i++) tail += alpha.charAt(rndInt(alpha.length));
+      var code = o.prefix ? o.prefix + (o.dash ? '-' : '') + tail : tail;
+      var key = norm(code);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ code: code, style: 'random' });
+    }
+    return out;
+  }
+
+  var current = [];
+  var favs = lsGet(KEY_FAVS, []);
+  if (!Array.isArray(favs)) favs = [];
+
+  function copyText(text) {
+    var p;
+    try { p = navigator.clipboard.writeText(text); } catch (e) { p = Promise.reject(e); }
+    return p.then(function () { return true; }).catch(function () {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        var ok = document.execCommand('copy');
+        ta.remove();
+        return ok;
+      } catch (e2) { return false; }
+    });
+  }
+  function flash(btn, text, ok) {
+    var old = btn.dataset.label || btn.textContent;
+    btn.dataset.label = old;
+    btn.textContent = ok ? text : 'Не вышло';
+    if (ok) btn.classList.add('done');
+    clearTimeout(btn._t);
+    btn._t = setTimeout(function () { btn.textContent = old; btn.classList.remove('done'); }, 1300);
+    $('live').textContent = ok ? text : 'Не удалось скопировать';
+  }
+
+  function isFav(code) { return favs.indexOf(code) !== -1; }
+  function toggleFav(code) {
+    var i = favs.indexOf(code);
+    if (i === -1) favs.unshift(code); else favs.splice(i, 1);
+    lsSet(KEY_FAVS, favs);
+    renderCodes();
+    renderFavs();
+  }
+
+  function renderCodes() {
+    var ul = $('codes');
+    ul.textContent = '';
+    current.forEach(function (item) {
+      var li = document.createElement('li');
+      li.className = 'code-row';
+
+      var star = document.createElement('button');
+      star.type = 'button'; star.className = 'star';
+      star.textContent = '★';
+      star.setAttribute('aria-pressed', isFav(item.code) ? 'true' : 'false');
+      star.setAttribute('aria-label', (isFav(item.code) ? 'Убрать из избранного: ' : 'В избранное: ') + item.code);
+      star.addEventListener('click', function () { toggleFav(item.code); });
+
+      var code = document.createElement('span');
+      code.className = 'code'; code.textContent = item.code;
+
+      var meta = document.createElement('span');
+      meta.className = 'meta';
+      var len = document.createElement('span');
+      len.className = 'len'; len.textContent = norm(item.code).length + ' зн.';
+      var kind = document.createElement('span');
+      kind.textContent = STYLE_LABELS[item.style];
+      meta.appendChild(len); meta.appendChild(kind);
+
+      var copy = document.createElement('button');
+      copy.type = 'button'; copy.className = 'btn small'; copy.textContent = 'Копировать';
+      copy.addEventListener('click', function () {
+        copyText(item.code).then(function (ok) { flash(copy, 'Скопировано', ok); });
+      });
+
+      li.appendChild(star); li.appendChild(code); li.appendChild(meta); li.appendChild(copy);
+      ul.appendChild(li);
+    });
+  }
+
+  function renderFavs() {
+    var box = $('favsBox');
+    box.textContent = '';
+    $('clearFavs').hidden = favs.length === 0;
+    if (!favs.length) {
+      var p = document.createElement('p');
+      p.className = 'empty';
+      p.textContent = 'Нажми звёздочку у кода, и он сохранится здесь.';
+      box.appendChild(p);
+      return;
+    }
+    var ul = document.createElement('ul');
+    ul.className = 'favs-list';
+    favs.forEach(function (c) {
+      var li = document.createElement('li'); li.className = 'fav';
+      var s = document.createElement('span'); s.textContent = c;
+      var cp = document.createElement('button');
+      cp.type = 'button'; cp.className = 'btn small link'; cp.textContent = 'Копировать';
+      cp.addEventListener('click', function () { copyText(c).then(function (ok) { flash(cp, 'Скопировано', ok); }); });
+      var rm = document.createElement('button');
+      rm.type = 'button'; rm.className = 'btn small link'; rm.textContent = '×';
+      rm.setAttribute('aria-label', 'Удалить ' + c + ' из избранного');
+      rm.addEventListener('click', function () { toggleFav(c); });
+      li.appendChild(s); li.appendChild(cp); li.appendChild(rm);
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+
+  function mode() { return document.querySelector('input[name="mode"]:checked').value; }
+
+  function generate() {
+    var exclude = parseExclude($('exclude').value);
+    var wanted, list;
+    if (mode() === 'themed') {
+      var styles = Array.prototype.map.call(document.querySelectorAll('input[name="style"]:checked'), function (i) { return i.value; });
+      wanted = parseInt($('count').value, 10);
+      list = genThemed({
+        theme: $('theme').value, lang: $('lang').value,
+        amount: $('amount').value, year: norm($('year').value) || String(new Date().getFullYear() % 100),
+        custom: norm($('custom').value), maxLen: parseInt($('maxlen').value, 10),
+        styles: styles, count: wanted, exclude: exclude
+      });
+      $('resNote').className = 'note';
+      if (!styles.length) {
+        $('resNote').textContent = 'Выбери хотя бы один стиль.';
+        $('resNote').className = 'note warn';
+      } else if (list.length < wanted) {
+        $('resNote').textContent = 'Получилось ' + list.length + ' из ' + wanted + '. Под такие ограничения вариантов мало: увеличь длину, добавь стили или язык.';
+        $('resNote').className = 'note warn';
+      } else {
+        $('resNote').textContent = 'Все коды укладываются в ' + $('maxlen').value + ' знаков.';
+      }
+    } else {
+      wanted = parseInt($('bcount').value, 10);
+      list = genBatch({
+        prefix: norm($('prefix').value).slice(0, 8), len: parseInt($('rlen').value, 10),
+        count: wanted, safe: $('safe').checked, dash: $('dash').checked, exclude: exclude
+      });
+      $('resNote').className = 'note';
+      $('resNote').textContent = $('safe').checked
+        ? 'Случайная часть без 0, O, 1, I, L: такие коды не путают при вводе с телефона.'
+        : 'Случайная часть может содержать 0/O и 1/I: игрокам такие коды вводить сложнее.';
+    }
+    current = list;
+    $('resTitle').textContent = 'Коды: ' + list.length;
+    $('copyAll').disabled = $('excludeAll').disabled = list.length === 0;
+    renderCodes();
+  }
+
+  var timer;
+  function schedule() { clearTimeout(timer); timer = setTimeout(generate, 220); }
+
+  function syncOutputs() {
+    $('maxlenOut').textContent = $('maxlen').value;
+    $('countOut').textContent = $('count').value;
+    $('rlenOut').textContent = $('rlen').value;
+    $('bcountOut').textContent = $('bcount').value;
+    var themed = mode() === 'themed';
+    $('themedFields').hidden = !themed;
+    $('batchFields').hidden = themed;
+  }
+
+  $('form').addEventListener('submit', function (e) { e.preventDefault(); clearTimeout(timer); generate(); });
+  $('form').addEventListener('input', function (e) {
+    if (e.target.id === 'exclude') lsSet(KEY_EXCL, $('exclude').value);
+    syncOutputs(); schedule();
+  });
+  $('form').addEventListener('change', function () { syncOutputs(); schedule(); });
+
+  $('copyAll').addEventListener('click', function () {
+    var b = this;
+    copyText(current.map(function (c) { return c.code; }).join('\n')).then(function (ok) { flash(b, 'Скопировано', ok); });
+  });
+  $('excludeAll').addEventListener('click', function () {
+    var have = new Set(parseExclude($('exclude').value));
+    var add = current.map(function (c) { return norm(c.code); }).filter(function (c) { return !have.has(c); });
+    var text = $('exclude').value.trim();
+    $('exclude').value = (text ? text + '\n' : '') + add.join('\n');
+    lsSet(KEY_EXCL, $('exclude').value);
+    flash(this, 'Добавлено', true);
+  });
+  $('clearFavs').addEventListener('click', function () { favs = []; lsSet(KEY_FAVS, favs); renderCodes(); renderFavs(); });
+
+  var savedExcl = lsGet(KEY_EXCL, '');
+  if (typeof savedExcl === 'string') $('exclude').value = savedExcl;
+  $('year').value = String(new Date().getFullYear() % 100);
+  syncOutputs();
+  generate();
+  renderFavs();
+})();
+</script>
+
+</body>
+</html>
